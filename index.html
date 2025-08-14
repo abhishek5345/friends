@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Automatic Fan On/Off – Demo</title>
+  <style>
+    :root{
+      --bg:#0b1220; --fg:#e5e7eb; --muted:#94a3b8; --accent:#22c55e; --warn:#f59e0b; --danger:#ef4444;
+      --panel:#111827; --ring:#1f2937; --card:#0f172a; --fan:#cbd5e1; --fan-dark:#94a3b8;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif; background:radial-gradient(1200px 700px at 50% -10%, #111827 20%, var(--bg) 70%); color:var(--fg); display:grid; place-items:center}
+
+    .app{width:min(1100px,92vw); display:grid; gap:1rem}
+    header{display:flex; justify-content:space-between; align-items:center; gap:1rem}
+    h1{font-size:clamp(1.2rem, 1.2rem + 1vw, 1.8rem); margin:0; letter-spacing:.3px}
+    .badge{display:inline-flex; align-items:center; gap:.5rem; padding:.35rem .6rem; border-radius:999px; background:var(--panel); font-size:.85rem; color:var(--muted)}
+
+    .grid{display:grid; grid-template-columns: 1.2fr .8fr; gap:1rem}
+    @media (max-width: 880px){ .grid{grid-template-columns: 1fr} }
+
+    .card{background:linear-gradient(180deg, var(--card), #0b1324); border:1px solid var(--ring); border-radius:1rem; padding:1rem; box-shadow:0 20px 60px rgba(0,0,0,.35)}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap}
+    .muted{color:var(--muted)}
+
+    /* FAN SCENE */
+    .scene{display:grid; place-items:center; padding:1rem}
+    .fan-wrap{position:relative; width:min(72vmin,520px); aspect-ratio:1/1; display:grid; place-items:center}
+    .cage{position:absolute; inset:0; border-radius:50%; background:radial-gradient(60% 60% at 50% 50%, rgba(255,255,255,.06) 10%, transparent 60%); box-shadow:inset 0 0 0 4px #0b1324, inset 0 0 0 12px #101b31, 0 20px 60px rgba(0,0,0,.45)}
+    .ring{position:absolute; inset:10%; border-radius:50%; border:2px dashed rgba(148,163,184,.25)}
+
+    .fan{ --speed: 2.4s; position:relative; width:62%; aspect-ratio:1/1; border-radius:50%; display:grid; place-items:center; filter:drop-shadow(0 6px 18px rgba(0,0,0,.35)); animation:spin var(--speed) linear infinite; animation-play-state:paused }
+    .hub{width:22%; aspect-ratio:1/1; border-radius:50%; background:radial-gradient(circle at 30% 30%, #fff6 0 35%, #9aa7b6 60%, #6b7280 80%); box-shadow:inset 0 0 0 3px #465161, inset 0 12px 28px rgba(0,0,0,.4)}
+    .blade{position:absolute; left:50%; top:50%; width:46%; height:18%; transform-origin:0% 50%; border-radius:2rem; background:linear-gradient(90deg, var(--fan) 0%, var(--fan-dark) 60%); box-shadow:inset 0 0 0 1px #94a3b8}
+    .b1{transform:translate(-50%, -50%) rotate(0deg)}
+    .b2{transform:translate(-50%, -50%) rotate(120deg)}
+    .b3{transform:translate(-50%, -50%) rotate(240deg)}
+
+    @keyframes spin{ to{ transform: rotate(360deg) } }
+
+    .stand{position:absolute; bottom:-6%; width:18%; height:30%; background:linear-gradient(180deg,#1f2937,#0f172a); border-radius:0 0 1rem 1rem; box-shadow:inset 0 0 0 2px #0b1324}
+    .led{position:absolute; bottom:-2%; width:10px; height:10px; border-radius:50%; background:#4b5563; box-shadow:0 0 0 3px rgba(0,0,0,.2)}
+
+    /* STATUS PANEL */
+    .status{display:grid; grid-template-columns:repeat(3, 1fr); gap:.75rem; margin-top:.75rem}
+    .pill{background:var(--panel); border:1px solid var(--ring); border-radius:.75rem; padding:.55rem .75rem; display:flex; align-items:center; justify-content:center; gap:.5rem}
+    .tag{opacity:.7}
+    .val{font-weight:700}
+
+    /* CONTROLS */
+    .controls{display:grid; gap:1rem}
+    .group{display:grid; gap:.5rem}
+    .group label{font-size:.9rem; color:var(--muted)}
+    .group input[type=range]{width:100%}
+    .switch{display:inline-flex; align-items:center; gap:.5rem}
+    .switch input{width:42px; height:22px}
+
+    .btns{display:flex; gap:.5rem; flex-wrap:wrap}
+    button{border:0; padding:.7rem 1rem; border-radius:.8rem; background:#111827; color:var(--fg); cursor:pointer; box-shadow:0 10px 24px rgba(0,0,0,.25); font-weight:600}
+    button.primary{background:#2563eb}
+    button.ghost{background:transparent; border:1px solid var(--ring)}
+
+    .ok{color:var(--accent)} .warn{color:var(--warn)} .danger{color:var(--danger)}
+    .note{font-size:.85rem; color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Automatic Fan On/Off <span class="muted">— thermostat demo</span></h1>
+      <span class="badge" id="modeBadge" aria-live="polite">Mode: Auto</span>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: FAN -->
+      <section class="card scene" aria-label="Fan visualization">
+        <div class="fan-wrap">
+          <div class="cage"></div>
+          <div class="ring"></div>
+          <div class="fan" id="fan">
+            <div class="blade b1"></div>
+            <div class="blade b2"></div>
+            <div class="blade b3"></div>
+            <div class="hub"></div>
+          </div>
+          <div class="stand"></div>
+          <div class="led" id="led"></div>
+        </div>
+
+        <div class="status">
+          <div class="pill"><span class="tag">Fan</span> <span id="fanState" class="val danger">OFF</span></div>
+          <div class="pill"><span class="tag">Room</span> <span id="tempVal" class="val">--</span>°C</div>
+          <div class="pill"><span class="tag">Setpoint</span> <span id="setVal" class="val">--</span>°C</div>
+        </div>
+      </section>
+
+      <!-- RIGHT: CONTROLS -->
+      <section class="card controls" aria-label="Controls">
+        <div class="group">
+          <label for="mode">Mode</label>
+          <div class="row">
+            <div class="switch"><input id="mode" type="checkbox" aria-label="Toggle Auto Mode"/> <span id="modeText">Auto</span></div>
+            <div class="btns">
+              <button id="btnOn" class="ghost" aria-label="Manual ON" title="Manual ON">On</button>
+              <button id="btnOff" class="ghost" aria-label="Manual OFF" title="Manual OFF">Off</button>
+            </div>
+          </div>
+          <p class="note">When <b>Auto</b> is enabled, the fan switches based on temperature vs setpoint with hysteresis.</p>
+        </div>
+
+        <div class="group">
+          <label for="temp">Room Temperature: <b><span id="tempLabel">28</span> °C</b></label>
+          <input type="range" id="temp" min="10" max="45" value="28" step="0.5" />
+          <div class="row">
+            <div class="switch"><input id="sim" type="checkbox"/> <span>Simulate temperature drift</span></div>
+            <button id="nudge" class="ghost" title="Random nudge">Nudge</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <label for="setpoint">Setpoint: <b><span id="setLabel">26</span> °C</b></label>
+          <input type="range" id="setpoint" min="16" max="40" value="26" step="0.5" />
+        </div>
+
+        <div class="group">
+          <label for="hyst">Hysteresis (°C): <b><span id="hLabel">1.0</span></b></label>
+          <input type="range" id="hyst" min="0.5" max="5" value="1" step="0.5" />
+          <p class="note">Fan turns <b>ON</b> when temp ≥ setpoint + h/2, and <b>OFF</b> when temp ≤ setpoint − h/2.</p>
+        </div>
+
+        <div class="group">
+          <label>Speed (Auto)</label>
+          <p class="note">In Auto mode, spin speed scales with how hot it is above setpoint.</p>
+        </div>
+
+        <div class="row">
+          <button id="save" class="primary">Save settings</button>
+          <button id="reset" class="ghost">Reset</button>
+        </div>
+      </section>
+    </div>
+
+    <p class="note">Tip: press <kbd>F</kbd> to toggle the fan in manual mode. Settings are stored locally.</p>
+  </div>
+
+  <script>
+    const $ = (id)=>document.getElementById(id);
+    const fan = $('fan');
+    const led = $('led');
+
+    const state = {
+      modeAuto: true,
+      temp: 28,
+      setpoint: 26,
+      hyst: 1,
+      fanOn: false,
+      sim: false,
+    };
+
+    // Load saved
+    try{
+      const saved = JSON.parse(localStorage.getItem('autoFan:v1')||'null');
+      if(saved) Object.assign(state, saved);
+    }catch{}
+
+    // ELEMENTS
+    const modeChk = $('mode');
+    const modeText = $('modeText');
+    const modeBadge = $('modeBadge');
+    const btnOn = $('btnOn');
+    const btnOff = $('btnOff');
+
+    const tempRange = $('temp');
+    const tempLabel = $('tempLabel');
+    const tempVal = $('tempVal');
+
+    const setRange = $('setpoint');
+    const setLabel = $('setLabel');
+    const setVal = $('setVal');
+
+    const hystRange = $('hyst');
+    const hLabel = $('hLabel');
+
+    const simChk = $('sim');
+    const nudgeBtn = $('nudge');
+
+    const fanState = $('fanState');
+
+    const saveBtn = $('save');
+    const resetBtn = $('reset');
+
+    // Helpers
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+    function render(){
+      // Inputs
+      modeChk.checked = state.modeAuto;
+      modeText.textContent = state.modeAuto ? 'Auto' : 'Manual';
+      modeBadge.textContent = `Mode: ${state.modeAuto ? 'Auto' : 'Manual'}`;
+
+      tempRange.value = state.temp;
+      tempLabel.textContent = Number(state.temp).toFixed(1);
+      tempVal.textContent = Number(state.temp).toFixed(1);
+
+      setRange.value = state.setpoint;
+      setLabel.textContent = Number(state.setpoint).toFixed(1);
+      setVal.textContent = Number(state.setpoint).toFixed(1);
+
+      hystRange.value = state.hyst;
+      hLabel.textContent = Number(state.hyst).toFixed(1);
+
+      simChk.checked = state.sim;
+
+      // Visual fan
+      fan.style.animationPlayState = state.fanOn ? 'running' : 'paused';
+      led.style.background = state.fanOn ? '#22c55e' : '#4b5563';
+      fanState.textContent = state.fanOn ? 'ON' : 'OFF';
+      fanState.className = `val ${state.fanOn ? 'ok' : 'danger'}`;
+
+      // Speed scale: hotter => faster (down to 0.6s)
+      const over = Math.max(0, state.temp - state.setpoint);
+      const speed = clamp(2.4 - over * 0.12, 0.6, 2.4); // seconds per rotation
+      fan.style.setProperty('--speed', speed + 's');
+    }
+
+    function persist(){ localStorage.setItem('autoFan:v1', JSON.stringify(state)); }
+
+    function hysteresisDecision(){
+      const hi = state.setpoint + state.hyst/2;
+      const lo = state.setpoint - state.hyst/2;
+      if(state.temp >= hi) return true;   // turn ON
+      if(state.temp <= lo) return false;  // turn OFF
+      return state.fanOn;                 // keep previous
+    }
+
+    function stepAuto(){
+      if(state.modeAuto){
+        state.fanOn = hysteresisDecision();
+      }
+    }
+
+    function stepSim(dt){
+      if(!state.sim) return;
+      // random walk toward a drifting target
+      const t = performance.now()/1000;
+      const target = 27 + Math.sin(t/15)*5 + Math.sin(t/4)*1.2; // gentle day heat
+      const diff = target - state.temp;
+      state.temp += clamp(diff*0.05 + (Math.random()-0.5)*0.05, -0.2, 0.2) * dt * 60/16; // scale to ~16ms base
+      state.temp = clamp(state.temp, 10, 45);
+    }
+
+    // Event wiring
+    modeChk.addEventListener('input', ()=>{ state.modeAuto = modeChk.checked; render(); persist(); });
+    btnOn.addEventListener('click', ()=>{ state.modeAuto = false; state.fanOn = true; render(); persist(); });
+    btnOff.addEventListener('click', ()=>{ state.modeAuto = false; state.fanOn = false; render(); persist(); });
+
+    tempRange.addEventListener('input', ()=>{ state.temp = parseFloat(tempRange.value); render(); });
+    setRange.addEventListener('input', ()=>{ state.setpoint = parseFloat(setRange.value); render(); });
+    hystRange.addEventListener('input', ()=>{ state.hyst = parseFloat(hystRange.value); render(); });
+
+    simChk.addEventListener('input', ()=>{ state.sim = simChk.checked; persist(); });
+    nudgeBtn.addEventListener('click', ()=>{ state.temp = clamp(state.temp + (Math.random()-0.5)*4, 10, 45); render(); });
+
+    saveBtn.addEventListener('click', ()=>{ persist(); });
+    resetBtn.addEventListener('click', ()=>{ localStorage.removeItem('autoFan:v1'); location.reload(); });
+
+    // Keyboard: F to toggle in manual
+    addEventListener('keydown', (e)=>{
+      if(e.key.toLowerCase()==='f'){
+        state.modeAuto = false; state.fanOn = !state.fanOn; render(); persist();
+      }
+    });
+
+    // Init from saved
+    render();
+
+    // Main loop
+    let last = performance.now();
+    function loop(ts){
+      const dt = (ts - last) / 16.6667; // ~frames
+      last = ts;
+      stepSim(dt);
+      stepAuto();
+      render();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
+
